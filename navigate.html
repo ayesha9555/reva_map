@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Navigate — REVA Map</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --ink:#0B1220; --paper:#EDE6D3; --gold:#F2B705; --coral:#FF6B4A; }
+  *{ box-sizing:border-box; }
+  html, body{ margin:0; height:100%; background:var(--ink); color:var(--paper); font-family:'IBM Plex Sans', sans-serif; overflow:hidden; }
+  #cam{ position:fixed; inset:0; width:100%; height:100%; object-fit:cover; }
+  .top, .bottom{ position:fixed; left:0; right:0; z-index:2; padding:16px; }
+  .top{ top:0; padding-top:calc(16px + env(safe-area-inset-top, 0px)); display:flex; justify-content:space-between; align-items:center; background:linear-gradient(rgba(11,18,32,0.85), transparent); }
+  .top a{ color:var(--paper); text-decoration:none; font-size:0.9rem; }
+  #dest{ font-family:'Fraunces', serif; font-weight:600; font-size:1.1rem; color:var(--gold); }
+  .center{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:1; pointer-events:none; }
+  #arrow{ width:min(52vw,240px); transition:transform 0.2s linear; filter:drop-shadow(0 6px 14px rgba(0,0,0,0.6)); transform:rotate(0deg); }
+  .bottom{ bottom:0; padding-bottom:calc(20px + env(safe-area-inset-bottom, 0px)); text-align:center; background:linear-gradient(transparent, rgba(11,18,32,0.9) 40%); }
+  #dist{ font-family:'Fraunces', serif; font-weight:600; font-size:2.4rem; }
+  #msg{ color:#d6d0bd; font-size:0.9rem; margin:4px 0 14px; min-height:1.3em; }
+  button, .alt{ font:inherit; font-weight:600; border-radius:12px; padding:14px 22px; border:0; cursor:pointer; }
+  button{ background:var(--coral); color:#fff; width:100%; max-width:360px; font-size:1rem; }
+  button:focus-visible, .alt:focus-visible{ outline:2px solid #fff; }
+  .alt{ display:inline-block; margin-top:10px; padding:8px 12px; font-size:0.85rem; color:var(--paper); text-decoration:underline; background:none; }
+  [hidden]{ display:none !important; }
+</style>
+</head>
+<body>
+  <video id="cam" autoplay playsinline muted></video>
+  <div class="top"><a href="search.html">‹ All places</a><span id="dest"></span></div>
+  <div class="center"><svg id="arrow" viewBox="0 0 100 100" hidden><path d="M50 6 L88 86 L50 68 L12 86 Z" fill="#FF6B4A" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg></div>
+  <div class="bottom">
+    <div id="dist"></div>
+    <div id="msg">Tap Start, allow camera, location and motion.</div>
+    <button id="start">Start navigation</button>
+    <a class="alt" id="gmaps" target="_blank" rel="noopener" hidden>Open in Google Maps instead</a>
+  </div>
+
+  <script src="blocks.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const b = BLOCKS.find(x => x.id === location.hash.slice(1));
+    const mapsReady = new Promise(r => { window.initMap = r; });
+    let pos = null, heading = null, path = [], lastFetch = 0, cur = 0;
+
+    if(!b){ $('msg').textContent = 'Place not found. Go back and choose again.'; $('start').hidden = true; }
+    else {
+      $('dest').textContent = b.name;
+      if(b.lat == null || b.lng == null){ $('msg').textContent = "This place's coordinates are missing in blocks.js."; $('start').hidden = true; }
+      else { $('gmaps').href = `https://www.google.com/maps/dir/?api=1&destination=${b.lat},${b.lng}&travelmode=walking`; $('gmaps').hidden = false; }
+    }
+
+    const rad = d => d * Math.PI / 180;
+    function dist(a, c){
+      const h = Math.sin(rad(c.lat-a.lat)/2)**2 + Math.cos(rad(a.lat))*Math.cos(rad(c.lat))*Math.sin(rad(c.lng-a.lng)/2)**2;
+      return 12742000 * Math.asin(Math.sqrt(h));
+    }
+    function bearing(a, c){
+      const y = Math.sin(rad(c.lng-a.lng)) * Math.cos(rad(c.lat));
+      const x = Math.cos(rad(a.lat))*Math.sin(rad(c.lat)) - Math.sin(rad(a.lat))*Math.cos(rad(c.lat))*Math.cos(rad(c.lng-a.lng));
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    async function fetchRoute(){            // walking path from Google (Routes library)
+      lastFetch = Date.now();
+      try{
+        await mapsReady;
+        const { Route } = await google.maps.importLibrary('routes');
+        const { routes } = await Route.computeRoutes({ origin:pos, destination:{ lat:b.lat, lng:b.lng }, travelMode:'WALKING', fields:['path'] });
+        const val = v => typeof v === 'function' ? v() : v;
+        path = ((routes && routes[0] && routes[0].path) || []).map(p => ({ lat:val(p.lat), lng:val(p.lng) }));
+      }catch(e){ path = []; }
+    }
+    function nextPoint(){                   // first path point at least 15 m ahead of you
+      const end = { lat:b.lat, lng:b.lng };
+      if(!path.length) return end;
+      let i = 0, best = Infinity;
+      path.forEach((p, k) => { const d = dist(pos, p); if(d < best){ best = d; i = k; } });
+      if(best > 40 && Date.now() - lastFetch > 15000) fetchRoute();   // you left the path: re-route
+      for(let k = i; k < path.length; k++) if(dist(pos, path[k]) >= 15) return path[k];
+      return end;
+    }
+    function setArrow(deg){                 // shortest-turn rotation, no spinning at 360
+      cur += ((deg - cur + 540) % 360) - 180;
+      $('arrow').style.transform = `rotate(${cur}deg)`;
+    }
+    function update(){
+      if(!pos) return;
+      const left = dist(pos, { lat:b.lat, lng:b.lng });
+      if(left < 20){ $('arrow').hidden = true; $('dist').textContent = 'You have arrived'; $('msg').textContent = b.name; return; }
+      $('dist').textContent = left >= 1000 ? (left/1000).toFixed(1) + ' km' : Math.round(left) + ' m';
+      if(heading == null){ $('msg').textContent = 'Hold the phone upright and wave it in a figure 8 to calibrate.'; return; }
+      $('arrow').hidden = false;
+      $('msg').textContent = path.length ? 'Follow the arrow' : 'Pointing straight at the place (walking route unavailable)';
+      setArrow(bearing(pos, nextPoint()) - heading);
+    }
+    function onOrient(e){                   // compass direction the back camera faces
+      if(e.webkitCompassHeading != null) heading = e.webkitCompassHeading;
+      else if(e.alpha != null){
+        const x = rad(e.beta), y = rad(e.gamma), z = rad(e.alpha);
+        const vx = -Math.cos(z)*Math.sin(y) - Math.sin(z)*Math.sin(x)*Math.cos(y);
+        const vy = -Math.sin(z)*Math.sin(y) + Math.cos(z)*Math.sin(x)*Math.cos(y);
+        let h = Math.atan(vx / vy);
+        if(vy < 0) h += Math.PI; else if(vx < 0) h += 2*Math.PI;
+        heading = h * 180 / Math.PI;
+      }
+      update();
+    }
+
+    $('start').onclick = async () => {      // permissions must start from a tap (iOS)
+      $('start').hidden = true;
+      try{ $('cam').srcObject = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false }); }catch(e){}
+      try{ if(window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission(); }catch(e){}
+      window.addEventListener('ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation', onOrient);
+      $('msg').textContent = 'Finding your location...';
+      navigator.geolocation.watchPosition(p => {
+        const first = !pos;
+        pos = { lat:p.coords.latitude, lng:p.coords.longitude };
+        if(first) fetchRoute().then(update);
+        update();
+      }, () => { $('msg').textContent = 'Allow location access to navigate.'; }, { enableHighAccuracy:true, maximumAge:1000 });
+    };
+  </script>
+  <script async src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&loading=async&callback=initMap"></script>
+</body>
+</html>

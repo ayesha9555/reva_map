@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REVA Map — Find Your Way</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink: #0B1220;
+    --panel: #142544;
+    --panel-2: #0F1D38;
+    --paper: #EDE6D3;
+    --paper-dim: #B9B3A0;
+    --gold: #F2B705;
+    --coral: #FF6B4A;
+    --line: #2A3F63;
+  }
+
+  *{ box-sizing: border-box; }
+
+  html, body{
+    margin:0;
+    padding:0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: 'IBM Plex Sans', sans-serif;
+    overflow-x: hidden;
+  }
+
+  body{
+    min-height: 100vh;
+    display:flex;
+    flex-direction:column;
+    position:relative;
+  }
+
+  /* atmosphere: faint dot-grid + vignette, like the graph texture under the map */
+  .grain{
+    position:fixed;
+    inset:0;
+    background-image: radial-gradient(var(--line) 1px, transparent 1px);
+    background-size: 26px 26px;
+    opacity:0.35;
+    pointer-events:none;
+    z-index:0;
+  }
+  .vignette{
+    position:fixed;
+    inset:0;
+    background: radial-gradient(ellipse at 50% 30%, transparent 0%, var(--ink) 78%);
+    pointer-events:none;
+    z-index:0;
+  }
+
+  header{
+    position:relative;
+    z-index:2;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding: 28px clamp(20px, 6vw, 64px) 0;
+  }
+
+  .mark{
+    font-family:'Fraunces', serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--paper);
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .mark::before{
+    content:"";
+    width:9px; height:9px;
+    border-radius:50%;
+    background: var(--gold);
+    box-shadow: 0 0 0 3px rgba(242,183,5,0.18);
+  }
+
+  .status{
+    font-size: 0.78rem;
+    color: var(--paper-dim);
+    border: 1px solid var(--line);
+    padding: 6px 12px;
+    border-radius: 999px;
+  }
+
+  main{
+    position:relative;
+    z-index:2;
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    padding: 40px clamp(20px, 6vw, 64px) 60px;
+    max-width: 1040px;
+  }
+
+  /* the drawn route */
+  .route-wrap{
+    position:absolute;
+    top:0; left:0; right:0; bottom:0;
+    z-index:1;
+    pointer-events:none;
+  }
+  .route-path{
+    stroke: var(--line);
+    stroke-width: 3;
+    stroke-dasharray: 10 14;
+    fill:none;
+    stroke-linecap: round;
+    stroke-dashoffset: 1800;
+    animation: draw 2.6s ease-out forwards;
+  }
+  .route-dot{
+    fill: var(--gold);
+    opacity:0;
+    animation: dotIn 0.5s ease-out forwards;
+  }
+  @keyframes draw{ to{ stroke-dashoffset: 0; } }
+  @keyframes dotIn{ to{ opacity:1; } }
+
+  .eyebrow{
+    font-size: 0.85rem;
+    color: var(--gold);
+    letter-spacing: 0.02em;
+    margin: 0 0 18px;
+    opacity:0;
+    animation: fadeUp 0.6s ease-out 2.1s forwards;
+  }
+
+  h1{
+    font-family:'Fraunces', serif;
+    font-weight: 500;
+    font-size: clamp(2.4rem, 6.2vw, 4.4rem);
+    line-height: 1.05;
+    margin: 0 0 22px;
+    max-width: 15ch;
+  }
+  h1 .word{
+    display:inline-block;
+    opacity:0;
+    filter: blur(6px);
+    transform: translateY(14px);
+    animation: reveal 0.7s cubic-bezier(.2,.7,.3,1) forwards;
+  }
+  @keyframes reveal{ to{ opacity:1; filter: blur(0); transform: translateY(0); } }
+
+  .sub{
+    font-size: 1.05rem;
+    line-height: 1.6;
+    color: var(--paper-dim);
+    max-width: 46ch;
+    margin: 0 0 44px;
+    opacity:0;
+    animation: fadeUp 0.6s ease-out 2.25s forwards;
+  }
+
+  @keyframes fadeUp{
+    from{ opacity:0; transform: translateY(10px); }
+    to{ opacity:1; transform: translateY(0); }
+  }
+
+  .badges{
+    display:flex;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+
+  .badge{
+    position:relative;
+    display:flex;
+    align-items:center;
+    gap: 14px;
+    padding: 18px 24px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    text-decoration:none;
+    color: var(--paper);
+    cursor:pointer;
+    opacity:0;
+    transform: scale(0.92);
+    animation: popIn 0.5s cubic-bezier(.34,1.56,.64,1) forwards;
+    transition: border-color 0.25s ease, transform 0.25s ease;
+  }
+  .badge:hover{ transform: translateY(-3px) scale(1); }
+  .badge:nth-of-type(1){ animation-delay: 2.5s; }
+  .badge:nth-of-type(2){ animation-delay: 2.65s; }
+  @keyframes popIn{ to{ opacity:1; transform: scale(1); } }
+
+  .badge .icon{
+    width: 46px; height:46px;
+    border-radius: 10px;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .badge.scan .icon{ background: rgba(242,183,5,0.14); }
+  .badge.search .icon{ background: rgba(255,107,74,0.14); }
+  .badge.scan:hover{ border-color: var(--gold); }
+  .badge.search:hover{ border-color: var(--coral); }
+
+  .badge .icon svg{ width:22px; height:22px; }
+  .badge.scan .icon svg{ stroke: var(--gold); }
+  .badge.search .icon svg{ stroke: var(--coral); }
+
+  .badge .label{ display:flex; flex-direction:column; gap:2px; }
+  .badge .label .title{ font-size: 1rem; font-weight:600; }
+  .badge .label .desc{ font-size: 0.82rem; color: var(--paper-dim); }
+
+  footer{
+    position:relative;
+    z-index:2;
+    padding: 0 clamp(20px, 6vw, 64px) 28px;
+    font-size: 0.78rem;
+    color: var(--paper-dim);
+    display:flex;
+    justify-content:space-between;
+    opacity:0;
+    animation: fadeUp 0.6s ease-out 2.9s forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .route-path, .route-dot, h1 .word, .sub, .badge, .eyebrow, footer{
+      animation: none !important;
+      opacity:1 !important;
+      filter:none !important;
+      transform:none !important;
+      stroke-dashoffset:0 !important;
+    }
+  }
+
+  @media (max-width: 520px){
+    .badges{ flex-direction:column; }
+    .badge{ width:100%; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="grain"></div>
+  <div class="vignette"></div>
+
+  <div class="route-wrap" aria-hidden="true">
+    <svg width="100%" height="100%" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+      <path class="route-path" d="M -50 620 C 180 560, 260 700, 420 640 S 640 480, 760 520 S 980 400, 1250 300" />
+      <circle class="route-dot" cx="420" cy="640" r="6" style="animation-delay:1.3s"/>
+      <circle class="route-dot" cx="760" cy="520" r="6" style="animation-delay:1.9s"/>
+      <circle class="route-dot" cx="1080" cy="360" r="6" style="animation-delay:2.4s"/>
+    </svg>
+  </div>
+
+  <header>
+    <div class="mark">REVA MAP</div>
+    <div class="status">for freshers</div>
+  </header>
+
+  <main>
+    <p class="eyebrow">campus, decoded</p>
+    <h1><span class="word">Find</span> <span class="word">your</span> <span class="word">way</span> <span class="word">around</span> <span class="word">REVA.</span></h1>
+    <p class="sub">Point your camera at a block to know what's inside, or search a place and get walked there — no more wandering around looking for the library.</p>
+
+    <div class="badges">
+      <a class="badge scan" href="scan.html">
+        <span class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 8V6a2 2 0 0 1 2-2h2M4 16v2a2 2 0 0 0 2 2h2M20 8V6a2 2 0 0 0-2-2h-2M20 16v2a2 2 0 0 1-2 2h-2"/>
+            <circle cx="12" cy="12" r="3.2"/>
+          </svg>
+        </span>
+        <span class="label">
+          <span class="title">Scan a block</span>
+          <span class="desc">Point, capture, know what's inside</span>
+        </span>
+      </a>
+
+      <a class="badge search" href="search.html">
+        <span class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>
+            <path d="M14.5 9.5 12 12l-2.5 2.5L12 12z"/>
+          </svg>
+        </span>
+        <span class="label">
+          <span class="title">Search a location</span>
+          <span class="desc">Type it, get walked there</span>
+        </span>
+      </a>
+    </div>
+  </main>
+
+  <footer>
+    <span>REVA University, Bangalore</span>
+    <span>14 places mapped</span>
+  </footer>
+
+</body>
+</html>
