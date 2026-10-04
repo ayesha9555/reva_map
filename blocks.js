@@ -5,11 +5,11 @@
 // Blocks with lat/lng left as null are skipped in AR and have live route disabled.
 const BLOCKS = [
   { id: 'cv-raman-block', no: 1, tag: 'BLOCK 01', name: "CV Raman Block", desc: "Houses ECE, EEE, REVA NEST, Fab Lab, Kuvempu Auditorium and Aryabhatta Seminar Hall.",
-    lat: 13.1163119, lng: 77.6346704, model: '', viewer: '' },
+    lat: 13.1163119, lng: 77.6346704, model: '', viewer: 'https://go.echo3d.com/OOGf' },
   { id: 'sir-m-visvesvaraya-block', no: 2, tag: 'BLOCK 02', name: "Sir M Visvesvaraya Block", desc: "Civil, Mechanical, Computing & IT, and Architecture departments.",
-    lat: 13.1156712, lng: 77.6345695, model: '', viewer: '' },
+    lat: 13.1156712, lng: 77.6345695, model: '', viewer: 'https://go.echo3d.com/teIi' },
   { id: 'swami-vivekananda-block', no: 3, tag: 'BLOCK 03', name: "Swami Vivekananda Block", desc: "Legal Studies, CSA, Commerce, Management, Arts & Humanities, Placement Cell, and the Rangasthala amphitheatre.",
-    lat: 13.1146237, lng: 77.6348401, model: '', viewer: '' },
+    lat: 13.1146237, lng: 77.6348401, model: '', viewer: 'https://go.echo3d.com/SkNL' },
   { id: 'saugandhika', no: 4, tag: 'BLOCK 04', name: "Saugandhika", desc: "Garden stretch near SMV and SV Blocks.",
     lat: 13.1150597, lng: 77.6351948, model: '', viewer: 'https://go.echo3d.com/aVcE' },
   { id: 'library', no: 5, tag: 'BLOCK 05', name: "Library", desc: "Central library - reading floors, reference section, and the digital archive desk.",
