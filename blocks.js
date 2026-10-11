@@ -13,7 +13,7 @@ const BLOCKS = [
   { id: 'saugandhika', no: 4, tag: 'BLOCK 04', name: "Saugandhika", desc: "Garden stretch near SMV and SV Blocks.",
     lat: 13.1150597, lng: 77.6351948, model: '', viewer: 'https://go.echo3d.com/aVcE' },
   { id: 'library', no: 5, tag: 'BLOCK 05', name: "Library", desc: "Central library - reading floors, reference section, and the digital archive desk.",
-    lat: 12.992922685179664, lng:  77.60810488724142, model: '', viewer: 'https://go.echo3d.com/R50e' },
+    lat: 13.1147178, lng:  77.6352236, model: '', viewer: 'https://go.echo3d.com/R50e' },
   { id: 'playground', no: 6, tag: 'BLOCK 06', name: "Playground", desc: "Main ground for sports, assembly, and open-air events.",
     lat: 13.1165917, lng: 77.6361621, model: '', viewer: 'https://go.echo3d.com/Rssd' },
   { id: 'food-court-and-stationary', no: 7, tag: 'BLOCK 07', name: "Food Court & Stationary", desc: "Main food court with stationery shop attached.",
