@@ -13,7 +13,7 @@ const BLOCKS = [
   { id: 'saugandhika', no: 4, tag: 'BLOCK 04', name: "Saugandhika", desc: "Garden stretch near SMV and SV Blocks.",
     lat: 13.1150597, lng: 77.6351948, model: '', viewer: 'https://go.echo3d.com/aVcE' },
   { id: 'library', no: 5, tag: 'BLOCK 05', name: "Library", desc: "Central library - reading floors, reference section, and the digital archive desk.",
-    lat: 13.1147178, lng: 77.6352236, model: '', viewer: 'https://go.echo3d.com/R50e' },
+    lat: 12.992922685179664, lng:  77.60810488724142, model: '', viewer: 'https://go.echo3d.com/R50e' },
   { id: 'playground', no: 6, tag: 'BLOCK 06', name: "Playground", desc: "Main ground for sports, assembly, and open-air events.",
     lat: 13.1165917, lng: 77.6361621, model: '', viewer: 'https://go.echo3d.com/Rssd' },
   { id: 'food-court-and-stationary', no: 7, tag: 'BLOCK 07', name: "Food Court & Stationary", desc: "Main food court with stationery shop attached.",
@@ -33,3 +33,23 @@ const BLOCKS = [
   { id: 'pu-block', no: 14, tag: 'BLOCK 14', name: "PU Block", desc: "REVA Independent PU College.",
     lat: 13.1138789, lng: 77.6348089, model: '', viewer: 'https://go.echo3d.com/L2NG' },
 ];
+const MODEL_FILES = {
+  'cv-raman-block': 'cv-raman',
+  'sir-m-visvesvaraya-block': 'smv-block',
+  'swami-vivekananda-block': 'sv-block',
+  'saugandhika': 'saugandhika',
+  'library': 'library',
+  'playground': 'playground',
+  'food-court-and-stationary': 'food-court',
+  'reva-health-centre': 'health-center',
+  'panchami-sagar': 'panchami-sagar',
+  'admission-block': 'admission-block',
+  'reva-business-block': 'business-block',
+  'science-block': 'science-block',
+  'yippee-point': 'yippee-point',
+  'pu-block': 'pu-block'
+};
+
+BLOCKS.forEach(b => {
+  if (MODEL_FILES[b.id]) b.model = 'models/' + MODEL_FILES[b.id] + '.glb';
+});
