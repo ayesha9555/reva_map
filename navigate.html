@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Navigate — REVA Map</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   :root{ --ink:#0B1220; --paper:#EDE6D3; --gold:#F2B705; --coral:#FF6B4A; }
   *{ box-sizing:border-box; }
@@ -23,12 +24,15 @@
   button{ background:var(--coral); color:#fff; width:100%; max-width:360px; font-size:1rem; }
   button:focus-visible, .alt:focus-visible{ outline:2px solid #fff; }
   .alt{ display:inline-block; margin-top:10px; padding:8px 12px; font-size:0.85rem; color:var(--paper); text-decoration:underline; background:none; }
+  #mini{ position:fixed; z-index:3; right:12px; top:calc(64px + env(safe-area-inset-top, 0px)); width:130px; height:130px; border-radius:14px; border:2px solid var(--gold); overflow:hidden; }
+  #mini.big{ right:50%; transform:translateX(50%); width:min(88vw,420px); height:min(55vh,420px); }
   [hidden]{ display:none !important; }
 </style>
 </head>
 <body>
   <video id="cam" autoplay playsinline muted></video>
   <div class="top"><a href="search.html">‹ All places</a><span id="dest"></span></div>
+  <div id="mini" title="Tap to enlarge"></div>
   <div class="center"><svg id="arrow" viewBox="0 0 100 100" hidden><path d="M50 6 L88 86 L50 68 L12 86 Z" fill="#FF6B4A" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg></div>
   <div class="bottom">
     <div id="dist"></div>
@@ -37,10 +41,12 @@
     <a class="alt" id="gmaps" target="_blank" rel="noopener" hidden>Open in Google Maps instead</a>
   </div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="blocks.js"></script>
   <script>
     const $ = id => document.getElementById(id);
     const b = BLOCKS.find(x => x.id === location.hash.slice(1));
+    const GKEY = 'YOUR_API_KEY';            // paste a Google key here later for street-following routes
     const mapsReady = new Promise(r => { window.initMap = r; });
     let pos = null, heading = null, path = [], lastFetch = 0, cur = 0;
 
@@ -64,6 +70,7 @@
 
     async function fetchRoute(){            // walking path from Google (Routes library)
       lastFetch = Date.now();
+      if(GKEY === 'YOUR_API_KEY'){ path = []; return; }   // no key: straight line
       try{
         await mapsReady;
         const { Route } = await google.maps.importLibrary('routes');
@@ -81,6 +88,26 @@
       for(let k = i; k < path.length; k++) if(dist(pos, path[k]) >= 15) return path[k];
       return end;
     }
+    // ---- mini map (Leaflet + OpenStreetMap, no key needed) ----
+    let map, me, line, fitted = false;
+    function initMini(){
+      if(!window.L || !b || b.lat == null) return;
+      map = L.map('mini', { zoomControl:false, attributionControl:false }).setView([b.lat, b.lng], 17);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(map);
+      L.marker([b.lat, b.lng]).addTo(map).bindTooltip(b.name, { permanent:true, direction:'top' });
+      line = L.polyline([], { color:'#FF6B4A', weight:4 }).addTo(map);
+      $('mini').onclick = () => { $('mini').classList.toggle('big'); setTimeout(() => { map.invalidateSize(); fit(); }, 50); };
+    }
+    function fit(){ if(map && pos) map.fitBounds([[pos.lat, pos.lng], [b.lat, b.lng]], { padding:[24,24], maxZoom:18 }); }
+    function updateMini(){
+      if(!map || !pos) return;
+      if(!me) me = L.circleMarker([pos.lat, pos.lng], { radius:7, color:'#fff', weight:2, fillColor:'#2f80ff', fillOpacity:1 }).addTo(map);
+      me.setLatLng([pos.lat, pos.lng]);
+      line.setLatLngs(path.length ? path.map(p => [p.lat, p.lng]) : [[pos.lat, pos.lng], [b.lat, b.lng]]);
+      if(!fitted){ fit(); fitted = true; }
+    }
+    initMini();
+
     function setArrow(deg){                 // shortest-turn rotation, no spinning at 360
       cur += ((deg - cur + 540) % 360) - 180;
       $('arrow').style.transform = `rotate(${cur}deg)`;
@@ -110,18 +137,20 @@
 
     $('start').onclick = async () => {      // permissions must start from a tap (iOS)
       $('start').hidden = true;
-      try{ $('cam').srcObject = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false }); }catch(e){}
       try{ if(window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission(); }catch(e){}
+      try{ $('cam').srcObject = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false }); }catch(e){}
       window.addEventListener('ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation', onOrient);
       $('msg').textContent = 'Finding your location...';
       navigator.geolocation.watchPosition(p => {
         const first = !pos;
         pos = { lat:p.coords.latitude, lng:p.coords.longitude };
-        if(first) fetchRoute().then(update);
-        update();
+        if(first) fetchRoute().then(() => { update(); updateMini(); });
+        update(); updateMini();
       }, () => { $('msg').textContent = 'Allow location access to navigate.'; }, { enableHighAccuracy:true, maximumAge:1000 });
     };
   </script>
-  <script async src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&loading=async&callback=initMap"></script>
+  <script>
+    if(GKEY !== 'YOUR_API_KEY'){ const g = document.createElement('script'); g.async = true; g.src = `https://maps.googleapis.com/maps/api/js?key=${GKEY}&loading=async&callback=initMap`; document.head.appendChild(g); }
+  </script>
 </body>
 </html>

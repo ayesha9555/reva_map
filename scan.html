@@ -341,13 +341,17 @@
           arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
           renderer="antialias: true; alpha: true">
 
+          <!-- lights so the 3D models are bright, not dark -->
+          <a-light type="ambient" color="#ffffff" intensity="1.6"></a-light>
+          <a-light type="directional" color="#ffffff" intensity="1.1" position="1 4 2"></a-light>
+          <a-light type="directional" color="#ffffff" intensity="0.6" position="-2 2 -3"></a-light>
           <a-camera gps-new-camera="gpsMinDistance: 2" cursor="rayOrigin: mouse"></a-camera>
           <!-- gps-new-entity-place tags are generated from the BLOCKS array in the script below -->
           <a-entity id="places"></a-entity>
         </a-scene>
       </div>
 
-      <div class="live-tag" id="liveTag"><span class="dot"></span>locating</div>
+      <div class="live-tag" id="liveTag"><span class="dot"></span><span id="liveText">locating</span></div>
       <div class="bracket tl"></div>
       <div class="bracket tr"></div>
       <div class="bracket bl"></div>
@@ -387,6 +391,23 @@
     const distanceNote = document.getElementById('distanceNote');
     const placesEntity = document.getElementById('places');
 
+    // TEST AT HOME: open scan.html?sim=1 -> pretends you stand just outside the campus
+    const SIM = new URLSearchParams(location.search).has('sim');
+    let simPos = null;
+    if (SIM) {
+      const pts = BLOCKS.filter(x => x.lat != null && x.lng != null);
+      // stand ~220 m south of the campus, so every block is straight ahead (north) of you
+      const lat = Math.min(...pts.map(x => x.lat)) - 0.0020;
+      const lng = pts.reduce((t, x) => t + x.lng, 0) / pts.length;
+      // fake GPS: AR.js asks the browser for position, so we answer with the test spot
+      let n = 0;
+      const fake = () => ({ coords: { latitude: lat + (n < 4 ? (n++ % 2) * 0.00004 : 0), longitude: lng, accuracy: 5, altitude: 0, altitudeAccuracy: 5, heading: null, speed: null }, timestamp: Date.now() });
+      navigator.geolocation.getCurrentPosition = ok => ok(fake());
+      simPos = { lat, lng };
+      // home test: skip AR.js GPS (it needs a real fix) and place the blocks by plain x/z metres instead
+      document.querySelector('[gps-new-camera]').removeAttribute('gps-new-camera');
+    }
+
     let currentMode = 'ar';
     let stream = null;
     let arBuilt = false, placesCount = 0;
@@ -411,11 +432,23 @@
     function buildPlaces(){
       if(arBuilt) return placesCount;
       const ready = BLOCKS.filter(b => b.lat != null && b.lng != null);
+      // home demo: spread the blocks evenly around you (ordered by their real compass direction)
+      let ring = null;
+      if (SIM) {
+        const cLat = ready.reduce((t, x) => t + x.lat, 0) / ready.length, cLng = ready.reduce((t, x) => t + x.lng, 0) / ready.length;
+        const ang = x => Math.atan2((x.lng - cLng) * Math.cos(cLat * Math.PI / 180), x.lat - cLat);
+        ring = ready.slice().sort((p, q) => ang(p) - ang(q));
+      }
       ready.forEach(b => {
         const el = document.createElement('a-entity');
-        el.setAttribute('gps-new-entity-place', `latitude: ${b.lat}; longitude: ${b.lng};`);
-        el.setAttribute('look-at', '[gps-new-camera]');
-        el.setAttribute('scale', '14 14 14');
+        if (SIM) {
+          const k = ring.indexOf(b), a = k * 2 * Math.PI / ring.length, r = k % 2 ? 110 : 80;
+          el.setAttribute('position', `${r * Math.sin(a)} 6 ${-r * Math.cos(a)}`);
+        } else {
+          el.setAttribute('gps-new-entity-place', `latitude: ${b.lat}; longitude: ${b.lng};`);
+        }
+        el.setAttribute('look-at', SIM ? 'a-camera' : '[gps-new-camera]');
+        el.setAttribute('scale', SIM ? '8 8 8' : '14 14 14');
         el.setAttribute('text', `value: ${b.name}; align: center; color: #F2B705; width: 8;`);
         el.setAttribute('geometry', 'primitive: plane; width: 3.2; height: 0.9;');
         el.setAttribute('material', 'color: #0B1220; opacity: 0.82;');
@@ -480,12 +513,22 @@
             arContainer.classList.add('active');
             liveTag.classList.add('on');
             const n = buildPlaces();
-            distanceNote.textContent = n
+            // scene was created while hidden -> force correct size so the camera shows
+            [100, 600, 1500].forEach(t => setTimeout(() => window.dispatchEvent(new Event('resize')), t));
+            const liveText = document.getElementById('liveText');
+            if (SIM) {
+              liveText.textContent = 'demo view';
+              distanceNote.textContent = 'Demo view: drag to look around, W A S D to move. On campus the blocks use your real GPS position.';
+            }
+            const cam = document.querySelector('a-camera');
+            cam.addEventListener('gps-camera-update-position', () => { liveText.textContent = 'live'; });
+            setTimeout(() => { if (liveText.textContent === 'locating') liveText.textContent = 'waiting for GPS...'; }, 15000);
+            if (!SIM) distanceNote.textContent = n
               ? 'Labels use GPS + compass — accuracy is roughly 5–15m, so they may drift a little.'
               : 'No block coordinates yet — add lat/lng in blocks.js.';
           },
-          () => { placeholderHint.textContent = 'Location access was blocked — check your browser/site permissions.'; },
-          { enableHighAccuracy: true }
+          (e) => { placeholderHint.textContent = 'Location error: ' + e.message; },
+          { enableHighAccuracy: true, timeout: 30000 }
         );
       } catch (err) {
         placeholderHint.textContent = 'Motion & orientation access was blocked — check your browser/site permissions.';
