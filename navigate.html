@@ -6,6 +6,7 @@
 <title>Navigate — REVA Map</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
 <style>
   :root{ --ink:#0B1220; --paper:#EDE6D3; --gold:#F2B705; --coral:#FF6B4A; }
   *{ box-sizing:border-box; }
@@ -26,6 +27,7 @@
   .alt{ display:inline-block; margin-top:10px; padding:8px 12px; font-size:0.85rem; color:var(--paper); text-decoration:underline; background:none; }
   #mini{ position:fixed; z-index:3; right:12px; top:calc(64px + env(safe-area-inset-top, 0px)); width:130px; height:130px; border-radius:14px; border:2px solid var(--gold); overflow:hidden; }
   #mini.big{ right:50%; transform:translateX(50%); width:min(88vw,420px); height:min(55vh,420px); }
+  #mv3d{ position:fixed; left:50%; transform:translateX(-50%); top:calc(80px + env(safe-area-inset-top, 0px)); width:min(86vw,420px); height:42vh; z-index:2; background:transparent; --poster-color:transparent; }
   [hidden]{ display:none !important; }
 </style>
 </head>
@@ -33,6 +35,7 @@
   <video id="cam" autoplay playsinline muted></video>
   <div class="top"><a href="search.html">‹ All places</a><span id="dest"></span></div>
   <div id="mini" title="Tap to enlarge"></div>
+  <model-viewer id="mv3d" hidden camera-controls auto-rotate shadow-intensity="1" alt="3D model of the block"></model-viewer>
   <div class="center"><svg id="arrow" viewBox="0 0 100 100" hidden><path d="M50 6 L88 86 L50 68 L12 86 Z" fill="#FF6B4A" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg></div>
   <div class="bottom">
     <div id="dist"></div>
@@ -115,7 +118,10 @@
     function update(){
       if(!pos) return;
       const left = dist(pos, { lat:b.lat, lng:b.lng });
-      if(left < 20){ $('arrow').hidden = true; $('dist').textContent = 'You have arrived'; $('msg').textContent = b.name; return; }
+      const mv = $('mv3d');                 // within 15 m: show the block's 3D model
+      if(b.model && left <= 15){ if(!mv.getAttribute('src')) mv.setAttribute('src', b.model); mv.hidden = false; }
+      else if(left > 18) mv.hidden = true;
+      if(left < 8){ $('arrow').hidden = true; $('dist').textContent = 'You have arrived'; $('msg').textContent = b.name; return; }
       $('dist').textContent = left >= 1000 ? (left/1000).toFixed(1) + ' km' : Math.round(left) + ' m';
       if(heading == null){ $('msg').textContent = 'Hold the phone upright and wave it in a figure 8 to calibrate.'; return; }
       $('arrow').hidden = false;
@@ -135,18 +141,37 @@
       update();
     }
 
+    const SIM = new URLSearchParams(location.search).has('sim');   // home demo: navigate.html?sim=1#cv-raman-block
+
     $('start').onclick = async () => {      // permissions must start from a tap (iOS)
       $('start').hidden = true;
       try{ if(window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission(); }catch(e){}
       try{ $('cam').srcObject = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false }); }catch(e){}
+      if(SIM){                              // pretend to walk ~200 m to the block, turning a little as you go
+        let f = 0; const sLat = b.lat - 0.0015, sLng = b.lng - 0.0010;
+        setInterval(() => {
+          if(f < 0.98) f += 0.02;
+          pos = { lat:sLat + (b.lat - sLat)*f, lng:sLng + (b.lng - sLng)*f };
+          heading = (360 + 25*Math.sin(Date.now()/1500)) % 360;
+          update(); updateMini();
+        }, 500);
+        return;
+      }
       window.addEventListener('ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation', onOrient);
       $('msg').textContent = 'Finding your location...';
-      navigator.geolocation.watchPosition(p => {
+      const gotPos = p => {
         const first = !pos;
         pos = { lat:p.coords.latitude, lng:p.coords.longitude };
         if(first) fetchRoute().then(() => { update(); updateMini(); });
         update(); updateMini();
-      }, () => { $('msg').textContent = 'Allow location access to navigate.'; }, { enableHighAccuracy:true, maximumAge:1000 });
+      };
+      const posErr = e => {
+        if(e.code === 1) $('msg').textContent = 'Location is blocked. Allow it in Settings > Safari > Location.';
+        else if(!pos) $('msg').textContent = 'Still looking for GPS... stand in open sky and wait a minute.';
+      };
+      // 1) quick rough fix (wifi / mobile network), 2) then precise GPS keeps updating
+      navigator.geolocation.getCurrentPosition(gotPos, posErr, { enableHighAccuracy:false, timeout:15000, maximumAge:60000 });
+      navigator.geolocation.watchPosition(gotPos, posErr, { enableHighAccuracy:true, maximumAge:1000, timeout:30000 });
     };
   </script>
   <script>

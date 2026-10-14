@@ -345,7 +345,7 @@
           <a-light type="ambient" color="#ffffff" intensity="1.6"></a-light>
           <a-light type="directional" color="#ffffff" intensity="1.1" position="1 4 2"></a-light>
           <a-light type="directional" color="#ffffff" intensity="0.6" position="-2 2 -3"></a-light>
-          <a-camera gps-new-camera="gpsMinDistance: 2" cursor="rayOrigin: mouse"></a-camera>
+          <a-camera gps-new-camera="gpsMinDistance: 2; positionMinAccuracy: 150" cursor="rayOrigin: mouse"></a-camera>
           <!-- gps-new-entity-place tags are generated from the BLOCKS array in the script below -->
           <a-entity id="places"></a-entity>
         </a-scene>
@@ -521,7 +521,10 @@
               distanceNote.textContent = 'Demo view: drag to look around, W A S D to move. On campus the blocks use your real GPS position.';
             }
             const cam = document.querySelector('a-camera');
-            cam.addEventListener('gps-camera-update-position', () => { liveText.textContent = 'live'; });
+            if (!SIM) navigator.geolocation.watchPosition(p => {   // show the real GPS accuracy on the tag
+              const a = Math.round(p.coords.accuracy);
+              liveText.textContent = a <= 50 ? `live ±${a}m` : `weak GPS ±${a}m: move to open sky`;
+            }, () => {}, { enableHighAccuracy: true, maximumAge: 1000 });
             setTimeout(() => { if (liveText.textContent === 'locating') liveText.textContent = 'waiting for GPS...'; }, 15000);
             if (!SIM) distanceNote.textContent = n
               ? 'Labels use GPS + compass — accuracy is roughly 5–15m, so they may drift a little.'
